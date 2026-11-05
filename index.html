@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<!--
+  Interaktive SWOT- und TOWS-Analyse
+  Lizenz: MIT (siehe Hinweis unten). Copyright (c) Chrisp-Codes
+  Keine Gewähr. Die Nutzung erfolgt auf eigene Verantwortung.
+  Datenschutz: Keine Server, kein Tracking, keine Cookies. Eingaben bleiben im eigenen Browser
+  (localStorage). Die PDF-Bibliothek jsPDF (MIT) wird erst beim Klick auf "PDF herunterladen"
+  von cdnjs.cloudflare.com geladen.
+-->
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interaktive SWOT- und TOWS-Analyse</title>
+<style>
+  :root{
+    --navy:#0b2e3a;
+    --teal:#0e9bb8;
+    --red:#ec1c4f;
+    --grey:#9ea3a7;
+    --grey-text:#7d8488;
+    --ink:#26363e;
+    --muted:#6b7a82;
+    --mist:#eef6f8;
+    --mist-strong:#cfe9ef;
+    --line:#b9d3dc;
+  }
+  *{box-sizing:border-box}
+  [hidden]{display:none !important}
+  body{
+    margin:0;background:var(--navy);
+    font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
+    color:var(--ink);min-height:100vh;
+  }
+
+  /* ---------- Toolbar ---------- */
+  .toolbar{
+    display:flex;flex-wrap:wrap;gap:16px 24px;align-items:center;justify-content:space-between;
+    padding:22px 28px;color:#fff;max-width:1180px;margin:0 auto;
+  }
+  .title-input{
+    font-family:"Roboto Slab",Georgia,serif;font-weight:700;font-size:24px;
+    background:transparent;border:0;border-bottom:2px solid transparent;color:#fff;
+    padding:4px 0;min-width:260px;
+  }
+  .title-input:focus{outline:none;border-bottom-color:var(--teal)}
+  .meta{display:flex;gap:10px;flex-wrap:wrap}
+  .field{
+    background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.22);color:#fff;
+    border-radius:8px;padding:9px 12px;font:inherit;font-size:14px;min-width:0;
+  }
+  .field::placeholder{color:rgba(255,255,255,.55)}
+  .actions{display:flex;gap:10px;flex-wrap:wrap}
+  .btn{
+    font:inherit;font-size:14px;font-weight:600;border-radius:8px;padding:10px 16px;cursor:pointer;
+    border:1px solid transparent;transition:background .2s,color .2s;
+  }
+  .btn-primary{background:var(--teal);color:#fff}
+  .btn-primary:hover{background:#0b87a2}
+  .btn-ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.35)}
+  .btn-ghost:hover{background:rgba(255,255,255,.1)}
+  .field:focus-visible,.btn:focus-visible,.seg:focus-visible,.add button:focus-visible,.del:focus-visible,
+  .items input:focus-visible,.add input:focus-visible,.title-input:focus-visible{outline:3px solid #fff;outline-offset:2px}
+
+  .view-toggle{
+    display:inline-flex;gap:4px;padding:4px;border:1px solid rgba(255,255,255,.35);border-radius:10px;
+  }
+  .seg{
+    font:inherit;font-size:14px;font-weight:700;letter-spacing:.06em;padding:8px 20px;border-radius:7px;
+    border:0;background:transparent;color:#fff;cursor:pointer;
+  }
+  .seg:hover{background:rgba(255,255,255,.1)}
+  .seg[aria-pressed="true"]{background:#fff;color:var(--navy)}
+
+  /* ---------- SWOT Matrix ---------- */
+  .stage{
+    display:grid;grid-template-columns:56px 1fr;grid-template-areas:"v p" ". h";
+    gap:0 12px;max-width:1180px;margin:0 auto;padding:8px 28px 44px;
+  }
+  .vcol{
+    grid-area:v;display:flex;flex-direction:column;color:#c9dadf;
+    font-size:13px;letter-spacing:.18em;text-transform:uppercase;
+  }
+  .vcol span{
+    flex:1;display:flex;align-items:center;justify-content:center;text-align:center;line-height:1.5;
+    writing-mode:vertical-rl;transform:rotate(180deg);
+  }
+  .hlabels{
+    grid-area:h;display:grid;grid-template-columns:1fr 1fr;margin-top:18px;
+    color:#c9dadf;font-size:13px;letter-spacing:.18em;text-transform:uppercase;text-align:center;
+  }
+  .panel{
+    grid-area:p;position:relative;background:#fff;min-height:720px;
+    display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;
+    box-shadow:0 20px 40px rgba(0,0,0,.28);
+  }
+  .q{
+    position:relative;z-index:0;display:flex;flex-direction:column;
+    padding:30px 34px;min-width:0;min-height:0;--c:var(--navy);
+  }
+  /* Innenecken freihalten, damit Text nicht unter dem Kreis liegt */
+  .q.tl{padding-right:78px;padding-bottom:78px}
+  .q.tr{padding-left:78px;padding-bottom:78px}
+  .q.bl{padding-right:78px;padding-top:78px}
+  .q.br{padding-left:78px;padding-top:78px}
+
+  .q h2{
+    margin:0;text-align:center;font-size:18px;letter-spacing:.16em;text-transform:uppercase;
+    font-weight:700;color:var(--c);
+  }
+  .q .sub{text-align:center;font-size:12px;letter-spacing:.08em;color:var(--muted);margin:4px 0 14px}
+
+  /* Liste mit Eingabe (gemeinsam genutzt) */
+  .items{
+    list-style:none;margin:0;padding:0 4px 0 0;flex:1;min-height:60px;overflow:auto;
+    display:flex;flex-direction:column;gap:2px;
+  }
+  .items li{display:flex;align-items:center;gap:10px;border-bottom:1px solid #e3eaed;padding:3px 0}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--c);flex:none}
+  .items input{
+    flex:1;min-width:0;border:0;background:transparent;font:inherit;font-size:14.5px;
+    color:var(--ink);padding:6px 4px;border-radius:4px;
+  }
+  .items input:focus{outline:none;background:#f1f7f9}
+  .del{
+    border:0;background:transparent;color:#9aa5ab;cursor:pointer;font-size:20px;line-height:1;
+    padding:4px 8px;border-radius:4px;
+  }
+  .del:hover{color:var(--red)}
+  .empty{font-size:14px;color:#9aa5ab;font-style:italic;padding:8px 0;border:0 !important}
+
+  .add{display:flex;gap:8px;margin-top:14px}
+  .add input{
+    flex:1;min-width:0;border:1px solid #cfdadf;border-radius:8px;padding:10px 12px;
+    font:inherit;font-size:14px;color:var(--ink);background:#fff;
+  }
+  .add input:focus{outline:none;border-color:var(--c);box-shadow:0 0 0 3px color-mix(in srgb,var(--c) 20%,transparent)}
+  .add button{
+    border:0;background:var(--c);color:#fff;border-radius:8px;padding:0 16px;
+    font:inherit;font-weight:600;font-size:14px;cursor:pointer;white-space:nowrap;
+  }
+  .add button:hover{filter:brightness(1.12)}
+
+  /* Achsen */
+  .line-v,.line-h{position:absolute;background:#eef3f5;box-shadow:0 2px 6px rgba(0,0,0,.2);pointer-events:none;z-index:1}
+  .line-v{left:50%;top:-26px;bottom:-26px;width:8px;margin-left:-4px}
+  .line-h{top:50%;left:-30px;right:-30px;height:8px;margin-top:-4px}
+
+  /* Kreis mit Farbsegmenten */
+  .ring{
+    position:absolute;left:50%;top:50%;width:190px;height:190px;transform:translate(-50%,-50%);
+    border-radius:50%;z-index:2;box-shadow:0 6px 18px rgba(0,0,0,.25);
+    background:conic-gradient(
+      var(--red) 0deg 86deg,
+      var(--grey) 94deg 176deg,
+      var(--navy) 184deg 266deg,
+      var(--teal) 274deg 360deg
+    );
+  }
+  .core{
+    position:absolute;inset:36px;border-radius:50%;background:#fff;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    box-shadow:inset 0 2px 6px rgba(0,0,0,.12);color:#4a4a4a;
+    font-family:"Roboto Slab",Georgia,serif;line-height:1;
+  }
+  .core b{font-size:30px;letter-spacing:.04em}
+  .core span{font-size:21px;font-weight:600;margin-top:4px}
+
+  /* ---------- TOWS Matrix ---------- */
+  .tows{max-width:1180px;margin:0 auto;padding:8px 28px 44px}
+  .tows-grid{
+    display:grid;grid-template-columns:56px 210px 1fr 1fr;grid-template-rows:auto auto minmax(300px,1fr) minmax(300px,1fr);
+    gap:2px;background:var(--line);box-shadow:0 20px 40px rgba(0,0,0,.28);
+  }
+  .tows-grid > *{background:#fff;min-width:0}
+  .t-corner{grid-column:1 / 3;grid-row:1 / 3;background:var(--mist);display:flex;align-items:center;justify-content:center}
+  .t-corner span{font-family:Inter,sans-serif;font-weight:800;font-size:46px;color:var(--navy);letter-spacing:.02em}
+  .t-interne{
+    grid-column:3 / 5;grid-row:1;background:var(--mist-strong) !important;color:var(--teal);
+    text-align:center;font-weight:700;letter-spacing:.14em;text-transform:uppercase;font-size:16px;padding:12px;
+  }
+  .t-head{background:var(--mist) !important;padding:14px 16px;text-align:center;display:flex;flex-direction:column;justify-content:flex-start}
+  .t-head h3{margin:0;font-size:17px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink)}
+  .t-head .en{margin:2px 0 0;font-size:13px;color:var(--muted)}
+  .t-colhead{grid-row:2}
+  .t-colhead.s{grid-column:3} .t-colhead.w{grid-column:4}
+  .t-rowhead{grid-column:2;justify-content:flex-start}
+  .t-rowhead.o{grid-row:3} .t-rowhead.t{grid-row:4}
+  .t-externe{
+    grid-column:1;grid-row:3 / 5;background:var(--mist-strong) !important;color:var(--teal);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .t-externe span{
+    writing-mode:vertical-rl;transform:rotate(180deg);font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;font-size:16px;
+  }
+  .ref{
+    list-style:none;margin:10px 0 0;padding:0 4px 0 0;text-align:left;font-size:13px;line-height:1.4;
+    color:var(--ink);max-height:150px;overflow:auto;
+  }
+  .ref li{padding:2px 0 2px 12px;position:relative}
+  .ref li::before{content:"•";position:absolute;left:0;color:var(--muted)}
+  .ref li.ref-empty{color:#9aa5ab;font-style:italic}
+  .ref li.ref-empty::before{content:""}
+
+  .t-cell{display:flex;flex-direction:column;padding:18px 20px 18px;--c:var(--navy)}
+  .t-cell.so{grid-column:3;grid-row:3;--c:#0e9bb8}
+  .t-cell.wo{grid-column:4;grid-row:3;--c:#ec1c4f}
+  .t-cell.st{grid-column:3;grid-row:4;--c:#0b2e3a}
+  .t-cell.wt{grid-column:4;grid-row:4;--c:#7d8488}
+  .t-cell-head{text-align:center;margin-bottom:12px}
+  .t-cell-head h3{margin:0;font-size:22px;font-weight:800;letter-spacing:.04em;color:var(--c)}
+  .t-cell-head p{margin:2px 0 0;font-size:13px;color:var(--muted)}
+  .t-cell-q{text-align:center;font-size:13.5px;line-height:1.5;color:var(--ink);margin:0 0 12px;font-style:italic}
+
+  /* ---------- Responsive ---------- */
+  @media (max-width:820px){
+    .toolbar{padding:18px 16px}
+    .title-input{min-width:0;width:100%;font-size:20px}
+    .stage{grid-template-columns:1fr;grid-template-areas:"p";padding:8px 16px 32px}
+    .vcol,.hlabels,.line-v,.line-h,.ring{display:none}
+    .panel{grid-template-columns:1fr;grid-template-rows:auto;min-height:0}
+    .q,.q.tl,.q.tr,.q.bl,.q.br{padding:26px 20px;border-bottom:6px solid #f0f4f6}
+    .items{max-height:320px}
+    .tows{padding:8px 16px 32px}
+    .tows-grid{grid-template-columns:1fr;grid-template-rows:auto;gap:10px;background:none;box-shadow:none}
+    .tows-grid > *{grid-column:1 !important;grid-row:auto !important}
+    .t-corner,.t-interne,.t-externe{display:none}
+    .t-cell{box-shadow:0 6px 16px rgba(0,0,0,.2)}
+  }
+  .foot{text-align:center;font-size:12px;color:#8fa9b2;padding:0 16px 24px;margin:0}
+  @media print{
+    body{background:#fff}
+    .toolbar{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none !important}
+  }
+</style>
+</head>
+<body>
+
+<header class="toolbar">
+  <input id="title" class="title-input" value="SWOT-Analyse" aria-label="Titel der Analyse">
+  <div class="view-toggle" role="group" aria-label="Ansicht wählen">
+    <button class="seg" type="button" data-view="swot" aria-pressed="true">SWOT</button>
+    <button class="seg" type="button" data-view="tows" aria-pressed="false">TOWS</button>
+  </div>
+  <div class="meta">
+    <input id="company" class="field" type="text" placeholder="Unternehmen / Projekt" aria-label="Unternehmen oder Projekt">
+    <input id="date" class="field" type="date" aria-label="Datum">
+  </div>
+  <div class="actions">
+    <button class="btn btn-ghost" id="btnExample" type="button">Beispiel laden</button>
+    <button class="btn btn-ghost" id="btnClear" type="button">Alles leeren</button>
+    <button class="btn btn-ghost" id="btnSave" type="button">Speichern</button>
+    <button class="btn btn-ghost" id="btnLoad" type="button">Laden</button>
+    <input type="file" id="fileLoad" accept=".json,application/json" hidden>
+    <button class="btn btn-primary" id="btnPdf" type="button">PDF herunterladen</button>
+  </div>
+</header>
+
+<!-- ============ SWOT ============ -->
+<main class="stage" id="view-swot">
+  <aside class="vcol" aria-hidden="true">
+    <span>Unternehmen (intern)</span>
+    <span>Umwelt (extern)</span>
+  </aside>
+
+  <section class="panel" aria-label="SWOT-Matrix">
+    <article class="q tl" style="--c:#0e9bb8" aria-labelledby="h-s">
+      <h2 id="h-s">Strengths</h2>
+      <p class="sub">Stärken</p>
+      <ul class="items" id="list-s"></ul>
+      <form class="add" id="form-s">
+        <input type="text" id="input-s" placeholder="Neuer Punkt ..." aria-label="Neuer Punkt bei Stärken">
+        <button type="submit">Hinzufügen</button>
+      </form>
+    </article>
+
+    <article class="q tr" style="--c:#ec1c4f" aria-labelledby="h-w">
+      <h2 id="h-w">Weaknesses</h2>
+      <p class="sub">Schwächen</p>
+      <ul class="items" id="list-w"></ul>
+      <form class="add" id="form-w">
+        <input type="text" id="input-w" placeholder="Neuer Punkt ..." aria-label="Neuer Punkt bei Schwächen">
+        <button type="submit">Hinzufügen</button>
+      </form>
+    </article>
+
+    <article class="q bl" style="--c:#0b2e3a" aria-labelledby="h-o">
+      <h2 id="h-o">Opportunities</h2>
+      <p class="sub">Chancen</p>
+      <ul class="items" id="list-o"></ul>
+      <form class="add" id="form-o">
+        <input type="text" id="input-o" placeholder="Neuer Punkt ..." aria-label="Neuer Punkt bei Chancen">
+        <button type="submit">Hinzufügen</button>
+      </form>
+    </article>
+
+    <article class="q br" style="--c:#7d8488" aria-labelledby="h-t">
+      <h2 id="h-t">Threats</h2>
+      <p class="sub">Risiken</p>
+      <ul class="items" id="list-t"></ul>
+      <form class="add" id="form-t">
+        <input type="text" id="input-t" placeholder="Neuer Punkt ..." aria-label="Neuer Punkt bei Risiken">
+        <button type="submit">Hinzufügen</button>
+      </form>
+    </article>
+
+    <div class="line-v" aria-hidden="true"></div>
+    <div class="line-h" aria-hidden="true"></div>
+    <div class="ring" aria-hidden="true"><div class="core"><b>SWOT</b><span>Analyse</span></div></div>
+  </section>
+
+  <div class="hlabels" aria-hidden="true">
+    <span>Hilfreich</span>
+    <span>Hindernd</span>
+  </div>
+</main>
+
+<!-- ============ TOWS ============ -->
+<main class="tows" id="view-tows" hidden>
+  <div class="tows-grid" role="region" aria-label="TOWS-Matrix">
+    <div class="t-corner"><span>TOWS</span></div>
+    <div class="t-interne">Interne Analyse</div>
+
+    <div class="t-head t-colhead s">
+      <h3>Stärken</h3><p class="en">(Strengths)</p>
+      <ul class="ref" id="ref-s"></ul>
+    </div>
+    <div class="t-head t-colhead w">
+      <h3>Schwächen</h3><p class="en">(Weaknesses)</p>
+      <ul class="ref" id="ref-w"></ul>
+    </div>
+
+    <div class="t-externe"><span>Externe Analyse</span></div>
+
+    <div class="t-head t-rowhead o">
+      <h3>Chancen</h3><p class="en">(Opportunities)</p>
+      <ul class="ref" id="ref-o"></ul>
+    </div>
+    <article class="t-cell so" aria-labelledby="t-so">
+      <div class="t-cell-head"><h3 id="t-so">SO</h3><p>Stärken nutzen Chancen</p></div>
+      <p class="t-cell-q">Aus welchen Stärken ergeben sich neue Chancen?</p>
+      <ul class="items" id="tlist-so"></ul>
+      <form class="add" id="tform-so">
+        <input type="text" id="tinput-so" placeholder="Neue Strategie ..." aria-label="Neue Strategie SO">
+        <button type="submit">Hinzufügen</button>
+      </form>
+    </article>
+    <article class="t-cell wo" aria-labelledby="t-wo">
+      <div class="t-cell-head"><h3 id="t-wo">WO</h3><p>Schwächen abbauen, Chancen nutzen</p></div>
+      <p class="t-cell-q">An welchen Schwächen arbeiten, um Chancen zu nutzen?</p>
+      <ul class="items" id="tlist-wo"></ul>
+      <form class="add" id="tform-wo">
+        <input type="text" id="tinput-wo" placeholder="Neue Strategie ..." aria-label="Neue Strategie WO">
+        <button type="submit">Hinzufügen</button>
+      </form>
+    </article>
+
+    <div class="t-head t-rowhead t">
+      <h3>Risiken</h3><p class="en">(Threats)</p>
+      <ul class="ref" id="ref-t"></ul>
+    </div>
+    <article class="t-cell st" aria-labelledby="t-st">
+      <div class="t-cell-head"><h3 id="t-st">ST</h3><p>Stärken nutzen, Risiken abwehren</p></div>
+      <p class="t-cell-q">Welche Stärken minimieren mögliche Bedrohungen?</p>
+      <ul class="items" id="tlist-st"></ul>
+      <form class="add" id="tform-st">
+        <input type="text" id="tinput-st" placeholder="Neue Strategie ..." aria-label="Neue Strategie ST">
+        <button type="submit">Hinzufügen</button>
+      </form>
+    </article>
+    <article class="t-cell wt" aria-labelledby="t-wt">
+      <div class="t-cell-head"><h3 id="t-wt">WT</h3><p>Schwächen minimieren, Risiken vermeiden</p></div>
+      <p class="t-cell-q">Welche Schwächen müssen zuerst abgebaut werden, damit sie nicht zu Risiken werden?</p>
+      <ul class="items" id="tlist-wt"></ul>
+      <form class="add" id="tform-wt">
+        <input type="text" id="tinput-wt" placeholder="Neue Strategie ..." aria-label="Neue Strategie WT">
+        <button type="submit">Hinzufügen</button>
+      </form>
+    </article>
+  </div>
+</main>
+
+<footer class="foot">Keine Gewähr. Alle Eingaben bleiben in deinem Browser. Lizenz: MIT.</footer>
+
+<script>
+(function () {
+  const KEYS = ['s', 'w', 'o', 't'];
+  const TKEYS = ['so', 'wo', 'st', 'wt'];
+
+  const DIMS = {
+    s: { name: 'Strengths',     de: 'Stärken',   color: '#0e9bb8' },
+    w: { name: 'Weaknesses',    de: 'Schwächen', color: '#ec1c4f' },
+    o: { name: 'Opportunities', de: 'Chancen',   color: '#0b2e3a' },
+    t: { name: 'Threats',       de: 'Risiken',   color: '#7d8488' }
+  };
+
+  const TDIMS = {
+    so: { label: 'SO - Stärken nutzen Chancen',               color: '#0e9bb8', q: 'Aus welchen Stärken ergeben sich neue Chancen?' },
+    wo: { label: 'WO - Schwächen abbauen, Chancen nutzen',     color: '#ec1c4f', q: 'An welchen Schwächen arbeiten, um Chancen zu nutzen?' },
+    st: { label: 'ST - Stärken nutzen, Risiken abwehren',      color: '#0b2e3a', q: 'Welche Stärken minimieren mögliche Bedrohungen?' },
+    wt: { label: 'WT - Schwächen minimieren, Risiken vermeiden', color: '#7d8488', q: 'Welche Schwächen müssen zuerst abgebaut werden, damit sie nicht zu Risiken werden?' }
+  };
+
+  const EXAMPLE = {
+    s: ['Hohe Kundenzufriedenheit (4,8 Sterne im Schnitt)', 'Eigene, handwerklich hergestellte Rezepturen', 'Erfahrenes und langjähriges Team'],
+    w: ['Begrenzte Kapazitäten in Stoßzeiten', 'Keine eigene Online-Bestellmöglichkeit', 'Hohe Abhängigkeit von einzelnen Lieferanten'],
+    o: ['Wachsende Nachfrage nach regionalen Produkten', 'Vorbestellungen und Lieferdienste ausbauen', 'Neue Filiale in einem wachsenden Stadtteil'],
+    t: ['Steigende Rohstoff- und Energiepreise', 'Starker Wettbewerb durch Discounter', 'Fachkräftemangel im Backhandwerk']
+  };
+
+  const TOWS_EXAMPLE = {
+    so: ['Stammkundschaft für ein Abo-Brotmodell nutzen', 'Handwerkliche Qualität für ein Premium-Sortiment nutzen'],
+    wo: ['Online-Bestellung aufbauen, um die Nachfrage nach regionalen Produkten zu nutzen', 'Kapazitätsplanung verbessern, um Vorbestellungen abzuwickeln'],
+    st: ['Stammkundschaft binden, um Preisdruck durch Discounter abzufedern', 'Eigene Rezepturen betonen, um sich vom Discounter-Sortiment abzuheben'],
+    wt: ['Lieferanten diversifizieren, um Rohstoff-Engpässe abzufedern', 'Ausbildung und Arbeitgebermarke stärken, um dem Fachkräftemangel zu begegnen']
+  };
+
+  // Entwurf wird lokal im Browser gespeichert (localStorage). Export über Speichern / Laden (JSON).
+  const STORE_KEY = 'swot-analyse-entwurf';
+  const JSPDF_URL = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+  const state = { s: [], w: [], o: [], t: [], tows: { so: [], wo: [], st: [], wt: [] } };
+
+  const $ = (id) => document.getElementById(id);
+
+  /* ---------- Rendering ---------- */
+  function renderEditable(ul, arr, label) {
+    ul.textContent = '';
+    if (arr.length === 0) {
+      const li = document.createElement('li');
+      li.className = 'empty';
+      li.textContent = 'Noch keine Einträge';
+      ul.append(li);
+    }
+    arr.forEach((txt, i) => {
+      const li = document.createElement('li');
+
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.value = txt;
+      inp.setAttribute('aria-label', label + ', Eintrag ' + (i + 1));
+      inp.addEventListener('input', () => { arr[i] = inp.value; renderRefs(); });
+
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'del';
+      del.textContent = '×';
+      del.setAttribute('aria-label', 'Eintrag löschen');
+      del.addEventListener('click', () => { arr.splice(i, 1); renderAll(); });
+
+      li.append(dot, inp, del);
+      ul.append(li);
+    });
+  }
+
+  function snapshot() {
+    return {
+      s: state.s, w: state.w, o: state.o, t: state.t, tows: state.tows,
+      title: $('title').value, company: $('company').value, date: $('date').value
+    };
+  }
+  function persist() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(snapshot())); } catch (e) { /* Speicher nicht verfügbar */ }
+  }
+  function restore() {
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (!raw) return;
+      const o = JSON.parse(raw);
+      const clean = (arr) => (Array.isArray(arr) ? arr.filter(v => typeof v === 'string') : []);
+      KEYS.forEach(k => { state[k] = clean(o[k]); });
+      TKEYS.forEach(k => { state.tows[k] = clean(o.tows && o.tows[k]); });
+      if (typeof o.title === 'string') $('title').value = o.title;
+      if (typeof o.company === 'string') $('company').value = o.company;
+      if (typeof o.date === 'string' && o.date) $('date').value = o.date;
+    } catch (e) { /* ungültiger Entwurf wird ignoriert */ }
+  }
+
+  function renderRefs() {
+    persist();
+    const refs = { 'ref-s': state.s, 'ref-w': state.w, 'ref-o': state.o, 'ref-t': state.t };
+    Object.keys(refs).forEach(id => {
+      const ul = $(id);
+      ul.textContent = '';
+      const vals = refs[id].map(v => v.trim()).filter(Boolean);
+      if (!vals.length) {
+        const li = document.createElement('li');
+        li.className = 'ref-empty';
+        li.textContent = 'Keine Einträge in der SWOT';
+        ul.append(li);
+        return;
+      }
+      vals.forEach(v => {
+        const li = document.createElement('li');
+        li.textContent = v;
+        ul.append(li);
+      });
+    });
+  }
+
+  function renderAll() {
+    KEYS.forEach(k => renderEditable($('list-' + k), state[k], DIMS[k].de));
+    TKEYS.forEach(k => renderEditable($('tlist-' + k), state.tows[k], TDIMS[k].label));
+    renderRefs();
+  }
+
+  function bindAdd(formId, inputId, getArr) {
+    $(formId).addEventListener('submit', (e) => {
+      e.preventDefault();
+      const inp = $(inputId);
+      const v = inp.value.trim();
+      if (!v) return;
+      getArr().push(v);
+      inp.value = '';
+      renderAll();
+      inp.focus();
+    });
+  }
+
+  function setView(v) {
+    const swot = v === 'swot';
+    $('view-swot').hidden = !swot;
+    $('view-tows').hidden = swot;
+    document.querySelectorAll('.seg').forEach(b => {
+      b.setAttribute('aria-pressed', String(b.dataset.view === v));
+    });
+    if (!swot) renderAll();
+  }
+
+  /* ---------- Hilfsfunktionen ---------- */
+  function fmtDate(v) {
+    if (!v) return '';
+    const [y, m, d] = v.split('-');
+    return d + '.' + m + '.' + y;
+  }
+
+  function safeName(t) {
+    return (t.replace(/[^\wäöüÄÖÜß-]+/g, '_').slice(0, 60)) || 'SWOT';
+  }
+
+  function hexToRgb(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+
+  /* ---------- PDF ---------- */
+  const LH = (size) => size * 0.3528 * 1.25;
+  const BASE = (size) => size * 0.3528 * 0.8;
+
+  function setBody(doc, size) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(size);
+    doc.setTextColor(38, 54, 62);
+  }
+
+  function measure(doc, items, size, textW) {
+    setBody(doc, size);
+    const lh = LH(size);
+    let h = 0;
+    const arr = items.map(t => {
+      const ls = doc.splitTextToSize(t, textW);
+      h += ls.length * lh + 1.5;
+      return ls;
+    });
+    return { arr, h };
+  }
+
+  // Zeichnet einen Kasten mit Titel und Liste, gibt nicht passende Punkte zurück
+  function drawBox(doc, title, colorHex, sub, items, x, y, w, h) {
+    const rgb = hexToRgb(colorHex);
+
+    doc.setFillColor(246, 248, 249);
+    doc.rect(x, y, w, h, 'F');
+    doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+    doc.rect(x, y, w, 1.8, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+    doc.text(title, x + 6, y + 10);
+
+    let cy = y + 16;
+    if (sub) {
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(8.5);
+      doc.setTextColor(107, 122, 130);
+      doc.text(sub, x + 6, cy);
+      cy += 5;
+    }
+
+    const pad = 6;
+    const textX = x + pad + 4;
+    const textW = w - pad * 2 - 4;
+    const bottom = y + h - 4;
+
+    if (!items.length) {
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(10);
+      doc.setTextColor(150, 156, 160);
+      doc.text('Noch keine Einträge', x + pad, cy + 3);
+      return [];
+    }
+
+    const sizes = [10, 9, 8.5, 8, 7.5, 7];
+    let chosen = null;
+    for (const s of sizes) {
+      const m = measure(doc, items, s, textW);
+      if (cy + m.h <= bottom) { chosen = { size: s, m }; break; }
+    }
+    if (!chosen) {
+      const s = sizes[sizes.length - 1];
+      chosen = { size: s, m: measure(doc, items, s, textW) };
+    }
+
+    const size = chosen.size;
+    const lh = LH(size);
+    const overflow = [];
+
+    items.forEach((item, i) => {
+      const lines = chosen.m.arr[i];
+      const need = lines.length * lh + 1.5;
+      if (overflow.length || cy + need > bottom) {
+        overflow.push(item);
+        return;
+      }
+      setBody(doc, size);
+      doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+      doc.text('\u2022', x + pad, cy + BASE(size));
+      setBody(doc, size);
+      lines.forEach((ln, j) => doc.text(ln, textX, cy + BASE(size) + j * lh));
+      cy += need;
+    });
+
+    return overflow;
+  }
+
+  // Fortsetzungsseiten für Punkte, die nicht mehr auf die Seite passten
+  function writeContinuation(doc, title, sections, W, H, M) {
+    doc.addPage('a4', 'landscape');
+    let y = M + 6;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor(11, 46, 58);
+    doc.text(title + ' - Fortsetzung', M, y);
+    y += 10;
+
+    sections.forEach(sec => {
+      const rgb = hexToRgb(sec.color);
+      if (y + 16 > H - M) { doc.addPage('a4', 'landscape'); y = M + 6; }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+      doc.text(sec.title, M, y);
+      y += 7;
+
+      const size = 11;
+      const lh = LH(size);
+      const textW = W - 2 * M - 6;
+      sec.items.forEach(item => {
+        setBody(doc, size);
+        const lines = doc.splitTextToSize(item, textW);
+        const need = lines.length * lh + 1.5;
+        if (y + need > H - M) { doc.addPage('a4', 'landscape'); y = M + 6; }
+        setBody(doc, size);
+        doc.text('\u2022', M, y + BASE(size));
+        lines.forEach((ln, j) => doc.text(ln, M + 5, y + BASE(size) + j * lh));
+        y += need;
+      });
+      y += 5;
+    });
+  }
+
+  let jsPdfPromise = null;
+  function ensureJsPdf() {
+    if (window.jspdf && window.jspdf.jsPDF) return Promise.resolve();
+    if (!jsPdfPromise) {
+      jsPdfPromise = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = JSPDF_URL;
+        s.onload = () => (window.jspdf && window.jspdf.jsPDF ? resolve() : reject());
+        s.onerror = () => { jsPdfPromise = null; reject(); };
+        document.head.appendChild(s);
+      });
+    }
+    return jsPdfPromise;
+  }
+  function exportPdf() {
+    ensureJsPdf().then(buildPdf, () => {
+      alert('Die PDF-Bibliothek konnte nicht geladen werden. Der Druckdialog wird geöffnet, dort kann als PDF gespeichert werden.');
+      window.print();
+    });
+  }
+  function buildPdf() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+    const W = 297, H = 210, M = 12;
+    const title = ($('title').value || 'SWOT-Analyse').trim();
+    const company = $('company').value.trim();
+    const date = fmtDate($('date').value);
+    const overflowSections = [];
+
+    /* Seite 1: SWOT */
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.setTextColor(11, 46, 58);
+    doc.text(title, M, 16);
+
+    const sub = [company, date ? 'Datum: ' + date : ''].filter(Boolean).join('   |   ');
+    if (sub) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(107, 122, 130);
+      doc.text(sub, M, 22);
+    }
+
+    const gap = 4, top = 30;
+    const colW = (W - 2 * M - gap) / 2;
+    const rowH = (H - M - top - gap) / 2;
+    const pos = {
+      s: [M, top],
+      w: [M + colW + gap, top],
+      o: [M, top + rowH + gap],
+      t: [M + colW + gap, top + rowH + gap]
+    };
+
+    KEYS.forEach(k => {
+      const [x, y] = pos[k];
+      const items = state[k].map(s => s.trim()).filter(Boolean);
+      const over = drawBox(doc, DIMS[k].name.toUpperCase() + '  /  ' + DIMS[k].de, DIMS[k].color, null, items, x, y, colW, rowH);
+      if (over.length) overflowSections.push({ title: DIMS[k].name + ' - ' + DIMS[k].de, color: DIMS[k].color, items: over });
+    });
+
+    /* Seite 2: TOWS */
+    doc.addPage('a4', 'landscape');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.setTextColor(11, 46, 58);
+    doc.text(title + ' - TOWS-Ableitung', M, 16);
+    if (sub) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(107, 122, 130);
+      doc.text(sub, M, 22);
+    }
+
+    const gridTop = 30;
+    const tRowH = (H - M - gridTop - gap) / 2;
+    const tPos = {
+      so: [M, gridTop],
+      wo: [M + colW + gap, gridTop],
+      st: [M, gridTop + tRowH + gap],
+      wt: [M + colW + gap, gridTop + tRowH + gap]
+    };
+    TKEYS.forEach(k => {
+      const [x, y] = tPos[k];
+      const items = state.tows[k].map(s => s.trim()).filter(Boolean);
+      const over = drawBox(doc, TDIMS[k].label, TDIMS[k].color, TDIMS[k].q, items, x, y, colW, tRowH);
+      if (over.length) overflowSections.push({ title: TDIMS[k].label, color: TDIMS[k].color, items: over });
+    });
+
+    if (overflowSections.length) writeContinuation(doc, title, overflowSections, W, H, M);
+
+    doc.save(safeName(title) + '.pdf');
+  }
+
+  /* ---------- Speichern / Laden ---------- */
+  function saveState() {
+    const payload = {
+      app: 'swot-analyse',
+      version: 2,
+      savedAt: new Date().toISOString(),
+      title: $('title').value,
+      company: $('company').value,
+      date: $('date').value,
+      data: {
+        s: state.s.slice(),
+        w: state.w.slice(),
+        o: state.o.slice(),
+        t: state.t.slice()
+      },
+      tows: {
+        so: state.tows.so.slice(),
+        wo: state.tows.wo.slice(),
+        st: state.tows.st.slice(),
+        wt: state.tows.wt.slice()
+      }
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = safeName(($('title').value || 'SWOT-Analyse').trim()) + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function loadState(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const obj = JSON.parse(reader.result);
+        if (!obj || obj.app !== 'swot-analyse' || !obj.data) throw new Error('invalid');
+        const clean = (arr) => (Array.isArray(arr) ? arr.filter(v => typeof v === 'string') : []);
+        KEYS.forEach(k => { state[k] = clean(obj.data[k]); });
+        TKEYS.forEach(k => { state.tows[k] = clean(obj.tows && obj.tows[k]); });
+        $('title').value = typeof obj.title === 'string' ? obj.title : 'SWOT-Analyse';
+        $('company').value = typeof obj.company === 'string' ? obj.company : '';
+        $('date').value = typeof obj.date === 'string' ? obj.date : '';
+        renderAll();
+      } catch (err) {
+        alert('Die Datei konnte nicht geladen werden. Bitte eine mit „Speichern“ erzeugte SWOT-Datei auswählen.');
+      }
+    };
+    reader.onerror = () => alert('Die Datei konnte nicht gelesen werden.');
+    reader.readAsText(file);
+  }
+
+  /* ---------- Aktionen ---------- */
+  function hasData() {
+    return KEYS.some(k => state[k].length > 0) || TKEYS.some(k => state.tows[k].length > 0);
+  }
+
+  function loadExample() {
+    if (hasData() && !confirm('Die aktuellen Einträge werden durch das Beispiel ersetzt. Fortfahren?')) return;
+    KEYS.forEach(k => { state[k] = EXAMPLE[k].slice(); });
+    TKEYS.forEach(k => { state.tows[k] = TOWS_EXAMPLE[k].slice(); });
+    if (!$('company').value.trim()) $('company').value = 'Musterbäckerei GmbH';
+    renderAll();
+  }
+
+  function clearAll() {
+    if (hasData() && !confirm('Alle Einträge wirklich löschen? Dies kann nicht rückgängig gemacht werden.')) return;
+    KEYS.forEach(k => { state[k] = []; });
+    TKEYS.forEach(k => { state.tows[k] = []; });
+    renderAll();
+  }
+
+  function init() {
+    const d = new Date();
+    $('date').value = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+
+    KEYS.forEach(k => bindAdd('form-' + k, 'input-' + k, () => state[k]));
+    TKEYS.forEach(k => bindAdd('tform-' + k, 'tinput-' + k, () => state.tows[k]));
+
+    document.querySelectorAll('.seg').forEach(b => {
+      b.addEventListener('click', () => setView(b.dataset.view));
+    });
+
+    $('btnExample').addEventListener('click', loadExample);
+    $('btnClear').addEventListener('click', clearAll);
+    $('btnSave').addEventListener('click', saveState);
+    $('btnLoad').addEventListener('click', () => $('fileLoad').click());
+    $('fileLoad').addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (f) loadState(f);
+      e.target.value = '';
+    });
+    $('btnPdf').addEventListener('click', exportPdf);
+
+    restore();
+    ['title', 'company', 'date'].forEach(id => $(id).addEventListener('input', persist));
+    renderAll();
+    setView('swot');
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
