@@ -1,4 +1,4 @@
-# swot-tows-analyse
+# SWOT Analyse mit TOWS Ableitung
 ![Format](https://img.shields.io/badge/format-HTML-blue)
 ![Release](https://img.shields.io/github/v/release/Chrisp-Codes/swot-tows-analyse)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
