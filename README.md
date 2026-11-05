@@ -2,6 +2,7 @@
 ![Release](https://img.shields.io/github/v/release/Chrisp-Codes/swot-tows-analyse)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![English](https://img.shields.io/badge/README-English-informational?style=flat-square)
+
 Ziel
 Viele SWOT-Vorlagen sind statisch, an Konten gebunden oder kostenpflichtig. Dieses Tool ist eine einzelne HTML-Datei: interaktiv, ohne Anmeldung und ohne Server.  
 Die SWOT-Analyse wird mit der TOWS-Matrix verbunden. So lassen sich aus Stärken, Schwächen, Chancen und Risiken konkrete Strategien ableiten.
